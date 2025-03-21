@@ -14,7 +14,7 @@ void setup() {
     // Initialize FuzzyInput for pH level
     pH = new FuzzyInput(1);
     FuzzySet *acidic = new FuzzySet(1, 3.5, 6, 6.4);
-    FuzzySet *normal = new FuzzySet(6, 7.55, 9, 9);
+    FuzzySet *normal = new FuzzySet(6, 7.55, 7.55, 9);
     FuzzySet *alkaline = new FuzzySet(8, 9, 14.58, 19.25);
     
     pH->addFuzzySet(acidic);
@@ -25,7 +25,7 @@ void setup() {
     // Initialize FuzzyInput for DO (Dissolved Oxygen)
     DO = new FuzzyInput(2);
     FuzzySet *veryLow = new FuzzySet(0, 0, 1.5, 2.5);
-    FuzzySet *low = new FuzzySet(1, 2.5, 4, 4);
+    FuzzySet *low = new FuzzySet(1, 2.5, 2.5, 4);
     FuzzySet *normalDO = new FuzzySet(3, 4, 10.42, 13.75);
     
     DO->addFuzzySet(veryLow);
@@ -33,12 +33,12 @@ void setup() {
     DO->addFuzzySet(normalDO);
     fuzzy->addFuzzyInput(DO);
 
-    // Initialize FuzzyOutput for Water Quality
+    // Initialize FuzzyOutput for Water Quality based on table
     WaterQuality = new FuzzyOutput(1);
     FuzzySet *toxic = new FuzzySet(0, 12.5, 25, 25);
-    FuzzySet *poor = new FuzzySet(25, 38, 50, 50);
-    FuzzySet *good = new FuzzySet(50, 63, 75, 75);
-    FuzzySet *excellent = new FuzzySet(75, 88, 100, 100);
+    FuzzySet *poor = new FuzzySet(26, 38, 50, 50);
+    FuzzySet *good = new FuzzySet(51, 63, 75, 75);
+    FuzzySet *excellent = new FuzzySet(76, 88, 100, 100);
     
     WaterQuality->addFuzzySet(toxic);
     WaterQuality->addFuzzySet(poor);
@@ -63,9 +63,6 @@ void setup() {
     acidic_normal->joinWithAND(acidic, normalDO);
     FuzzyRuleConsequent *good_output = new FuzzyRuleConsequent();
     good_output->addOutput(good);
-    FuzzyRuleConsequent *excellent_output = new FuzzyRuleConsequent();
-    excellent_output->addOutput(excellent);
-    
     fuzzy->addFuzzyRule(new FuzzyRule(3, acidic_normal, good_output));
 
     FuzzyRuleAntecedent *normal_veryLow = new FuzzyRuleAntecedent();
@@ -74,6 +71,8 @@ void setup() {
 
     FuzzyRuleAntecedent *normal_low = new FuzzyRuleAntecedent();
     normal_low->joinWithAND(normal, low);
+    FuzzyRuleConsequent *excellent_output = new FuzzyRuleConsequent();
+    excellent_output->addOutput(excellent);
     fuzzy->addFuzzyRule(new FuzzyRule(5, normal_low, excellent_output));
 
     FuzzyRuleAntecedent *normal_normal = new FuzzyRuleAntecedent();
@@ -92,28 +91,50 @@ void setup() {
     alkaline_normal->joinWithAND(alkaline, normalDO);
     fuzzy->addFuzzyRule(new FuzzyRule(9, alkaline_normal, good_output));
 
-
     Serial.println("Fuzzy system initialized!");
 }
 
 void loop() {
-  // Example: Simulated sensor readings (replace with actual sensor values later)
-  float pH_value = 6.0;  // Example: Normal pH
-  float DO_value = 8.0;  // Example: Low DO
+    Serial.println("Simulating all possible outputs...\n");
 
-  // Set Inputs
-  fuzzy->setInput(1, pH_value);
-  fuzzy->setInput(2, DO_value);
+    for (float pH_value = 4.0; pH_value <= 11.0; pH_value += 0.5) {  
+        for (float DO_value = 0.0; DO_value <= 8.0; DO_value += 0.5) { 
+            
+            // Set Inputs
+            fuzzy->setInput(1, pH_value);
+            fuzzy->setInput(2, DO_value);
 
-  // Evaluate Fuzzy Logic
-  fuzzy->fuzzify();
+            // Evaluate Fuzzy Logic
+            fuzzy->fuzzify();
 
-  // Get Output
-  float waterQuality = fuzzy->defuzzify(1);
-  
-  Serial.print("pH: "); Serial.print(pH_value);
-  Serial.print(" | DO: "); Serial.print(DO_value);
-  Serial.print(" | Water Quality: "); Serial.println(waterQuality);
+            // Get Output
+            float waterQuality = fuzzy->defuzzify(1);
+            
+            // Determine linguistic equivalent
+            String qualityLabel;
+            if (waterQuality >= 0 && waterQuality <= 25) {
+                qualityLabel = "Toxic (T)";
+            } else if (waterQuality > 25 && waterQuality <= 50) {
+                qualityLabel = "Poor (P)";
+            } else if (waterQuality > 50 && waterQuality <= 75) {
+                qualityLabel = "Good (G)";
+            } else if (waterQuality > 75 && waterQuality <= 100) {
+                qualityLabel = "Excellent (E)";
+            } else {
+                qualityLabel = "Unknown";  // Fallback case
+            }
 
-  delay(2000);  // Wait before next evaluation
+            // Print results
+            Serial.print("pH: "); Serial.print(pH_value, 1);
+            Serial.print(" | DO: "); Serial.print(DO_value, 1);
+            Serial.print(" | Water Quality: "); Serial.print(waterQuality);
+            Serial.print(" | Equivalent: "); Serial.println(qualityLabel);
+
+            delay(200); 
+        }
+    }
+
+    Serial.println("Simulation complete!");
+    while (1); // Stop loop after running once
 }
+
