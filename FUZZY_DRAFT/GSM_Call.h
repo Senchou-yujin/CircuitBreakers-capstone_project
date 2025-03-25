@@ -16,14 +16,12 @@ void setup()
 
   mySerial.println("AT"); //Handshaking with SIM900
   updateSerial();
-
-  mySerial.println("AT+CMGF=1"); // Configuring TEXT mode
+  
+ mySerial.println("ATD+ +639618936396;"); //  change ZZ with country code and xxxxxxxxxxx with phone number to dial
   updateSerial();
- mySerial.println("AT+CMGS=\"+639618936396\"");//change ZZ with country code and xxxxxxxxxxx with phone number to sms
+  delay(20000); // wait for 20 seconds...
+  mySerial.println("ATH"); //hang up
   updateSerial();
-  mySerial.print("Last Minute Engineers | lastminuteengineers.com"); //text content
-  updateSerial();
-  mySerial.write(26);
 }
 
 void loop()

@@ -13,9 +13,9 @@ void setup() {
 
     // Initialize FuzzyInput for pH level
     pH = new FuzzyInput(1);
-    FuzzySet *acidic = new FuzzySet(1, 3.5, 6, 6.4);
-    FuzzySet *normal = new FuzzySet(6, 7.55, 7.55, 9);
-    FuzzySet *alkaline = new FuzzySet(8, 9, 14.58, 19.25);
+    FuzzySet *acidic = new FuzzySet(-1, 2, 5.4, 6.3); 
+    FuzzySet *normal = new FuzzySet(6.2, 7, 8.3, 8.5); 
+    FuzzySet *alkaline = new FuzzySet(8.4, 9.5, 14, 15); 
     
     pH->addFuzzySet(acidic);
     pH->addFuzzySet(normal);
@@ -24,9 +24,9 @@ void setup() {
 
     // Initialize FuzzyInput for DO (Dissolved Oxygen)
     DO = new FuzzyInput(2);
-    FuzzySet *veryLow = new FuzzySet(0, 0, 1.5, 2.5);
-    FuzzySet *low = new FuzzySet(1, 2.5, 2.5, 4);
-    FuzzySet *normalDO = new FuzzySet(3, 4, 10.42, 13.75);
+    FuzzySet *veryLow = new FuzzySet(-1, 1, 2.4, 4.2); 
+    FuzzySet *low = new FuzzySet(3.8, 5, 7.8, 8.2); 
+    FuzzySet *normalDO = new FuzzySet(7.8, 9, 18, 21);
     
     DO->addFuzzySet(veryLow);
     DO->addFuzzySet(low);
@@ -35,10 +35,10 @@ void setup() {
 
     // Initialize FuzzyOutput for Water Quality
     WaterQuality = new FuzzyOutput(1);
-    FuzzySet *toxic = new FuzzySet(0, 12.5, 25, 25);
-    FuzzySet *poor = new FuzzySet(25, 38, 50, 50);
-    FuzzySet *good = new FuzzySet(50, 63, 75, 75);
-    FuzzySet *excellent = new FuzzySet(75, 88, 100, 100);
+    FuzzySet *toxic = new FuzzySet(0, 12.5, 12.5, 25);
+    FuzzySet *poor = new FuzzySet(26, 38, 38, 50);
+    FuzzySet *good = new FuzzySet(51, 63, 63, 75);
+    FuzzySet *excellent = new FuzzySet(76, 88, 88, 100);
     
     WaterQuality->addFuzzySet(toxic);
     WaterQuality->addFuzzySet(poor);

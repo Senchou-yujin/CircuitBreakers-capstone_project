@@ -16,18 +16,18 @@ FuzzyOutput *Water_Gate_Action = new FuzzyOutput(1);
 // Membership Functions
 void setupFuzzy() {
     // **pH Level Membership Functions**
-    FuzzySet *acidic = new FuzzySet(1, 3.5, 6, 6.4);
-    FuzzySet *normal_pH = new FuzzySet(6, 6, 7.55, 9);
-    FuzzySet *alkaline = new FuzzySet(8, 9, 14.58, 19.25);
+    FuzzySet *acidic = new FuzzySet(-1, 2, 5.4, 6.3); 
+    FuzzySet *normal = new FuzzySet(6.2, 7, 8.3, 8.5); 
+    FuzzySet *alkaline = new FuzzySet(8.4, 9.5, 14, 15); 
     pH_Level->addFuzzySet(acidic);
     pH_Level->addFuzzySet(normal_pH);
     pH_Level->addFuzzySet(alkaline);
     fuzzy->addFuzzyInput(pH_Level);
 
     // **DO Level Membership Functions**
-    FuzzySet *very_low = new FuzzySet(0, 0, 1.5, 2.5);
-    FuzzySet *low = new FuzzySet(1, 1, 2.5, 4);
-    FuzzySet *normal_do = new FuzzySet(3, 4, 10.42, 13.75);
+    FuzzySet *veryLow = new FuzzySet(-1, 1, 2.4, 4.2); 
+    FuzzySet *low = new FuzzySet(3.8, 5, 7.8, 8.2); 
+    FuzzySet *normalDO = new FuzzySet(7.8, 9, 18, 21);
     DO_Level->addFuzzySet(very_low);
     DO_Level->addFuzzySet(low);
     DO_Level->addFuzzySet(normal_do);
