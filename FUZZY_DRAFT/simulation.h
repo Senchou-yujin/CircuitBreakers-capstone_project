@@ -72,7 +72,7 @@ void setup() {
     good_output->addOutput(good);
     fuzzy->addFuzzyRule(new FuzzyRule(3, acidic_normal, good_output));
 
-    // (4) Normal pH + Very Low DO → Poor (Previously was Toxic)
+    // (4) Normal pH + Very Low DO → Poor 
     FuzzyRuleAntecedent *normal_veryLow = new FuzzyRuleAntecedent();
     normal_veryLow->joinWithAND(normal, veryLow);
     fuzzy->addFuzzyRule(new FuzzyRule(4, normal_veryLow, poor_output));
@@ -99,7 +99,7 @@ void setup() {
     alkaline_low->joinWithAND(alkaline, low);
     fuzzy->addFuzzyRule(new FuzzyRule(8, alkaline_low, poor_output));
 
-    // (9) Alkaline + Normal DO → Good (Previously was Poor/Toxic)
+    // (9) Alkaline + Normal DO → Good 
     FuzzyRuleAntecedent *alkaline_normal = new FuzzyRuleAntecedent();
     alkaline_normal->joinWithAND(alkaline, normalDO);
     fuzzy->addFuzzyRule(new FuzzyRule(9, alkaline_normal, good_output)); 

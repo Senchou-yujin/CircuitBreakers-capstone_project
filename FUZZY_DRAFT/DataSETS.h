@@ -1,3 +1,15 @@
+#include <Arduino.h>
+#include <avr/pgmspace.h>
+#include <TimeLib.h>
+
+// Data sets
+typedef struct {
+    uint32_t epoch;     // Time in seconds
+    bool tideType;      // 1=High, 0=Low
+    bool isConsecutive; // 1=true, 0=false
+} TideEntry;
+
+// Your complete dataset (truncated for example)
 const TideEntry tideSchedule[] PROGMEM = {
     // Epoch timestamp | Tide (1=High/0=Low) | isConsecutive (from Logic)
     {1740869340, 1, 1}, {1740959100, 0, 0}, {1741004400, 0, 0}, {1741092120, 0, 0},
@@ -18,7 +30,7 @@ const TideEntry tideSchedule[] PROGMEM = {
     {1746009780, 1, 1}, {1746098460, 1, 1}, {1746187560, 1, 1}, {1746277140, 1, 1},
     {1746367380, 1, 1}, {1746458340, 1, 1}, {1746549540, 0, 0}, {1746641160, 0, 0},
     {1746732780, 0, 0}, {1746781080, 0, 0}, {1746867720, 0, 0}, {1746954600, 1, 1},
-    {1747041420, 1, 1}, {1747128420, 1, 1}, {1747215960, 1, 1}, {1747304400, 1, 1},
+    {1747041420, 1, 1}, {1747128420, 1, 1}, {1747215960, 1, 1}, 
     {1747390380, 1, 1}, {1747481160, 1, 1}, {1747570260, 1, 1}, {1747659660, 1, 1},
     {1747749480, 1, 1}, {1747839780, 1, 1}, {1747930680, 1, 1}, {1748023020, 0, 0},
     {1748074020, 0, 0}, {1748161140, 1, 1}, {1748248860, 1, 1}, {1748337000, 1, 1},
@@ -70,3 +82,35 @@ const TideEntry tideSchedule[] PROGMEM = {
     {1764203760, 1, 1}, {1764293220, 1, 1}, {1764383040, 1, 1}, {1764473460, 1, 1}
 };
 const int tideScheduleSize = sizeof(tideSchedule) / sizeof(TideEntry);
+
+// Helper to read PROGMEM data
+TideEntry getTideData(int index) {
+    TideEntry entry;
+    memcpy_P(&entry, &tideSchedule[index], sizeof(TideEntry));
+    return entry;
+}
+
+// Convert epoch to readable date/time (UTC)
+String epochToDateTime(uint32_t epoch) {
+    char buf[20];
+    snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d",
+             year(epoch), month(epoch), day(epoch),
+             hour(epoch), minute(epoch));
+    return String(buf);
+}
+
+void setup() {
+    Serial.begin(115200);
+    
+    // Example: Print first 5 entries with converted dates
+    for (int i = 0; i < min(272, tideScheduleSize); i++) {
+        TideEntry e = getTideData(i);
+        Serial.print(epochToDateTime(e.epoch));
+        Serial.print(" | ");
+        Serial.print(e.tideType ? "High" : "Low");
+        Serial.print(e.isConsecutive ? " (Consec)" : "");
+        Serial.println();
+    }
+}
+
+void loop() {}
