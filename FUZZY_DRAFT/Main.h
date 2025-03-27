@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <Fuzzy.h>
 #include <RTClib.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -7,7 +8,22 @@
 #define trigPin 5
 #define echoPin 6
 
-// VARIABLES na pwede nyong baguhin based sa locale nyo.
+// Define analog input pins
+#define DO_PIN A2   // DO Sensor connected to A2
+#define PH_PIN A0   // pH Sensor connected to A0
+
+// Calibration values for pH sensor
+#define PH_7_VOLTAGE 1.2    // Voltage at pH 7 (Neutral)
+#define PH_SLOPE -0.18      // Voltage change per pH unit
+#define PH_SAMPLES 20       // Number of samples for averaging
+
+// Calibration values for DO sensor
+#define VREF 5.0            // Reference voltage
+#define ADC_RESOLUTION 1023.0 // 10-bit ADC resolution
+#define DO_SATURATION 25    // Maximum DO value in mg/L at calibration
+#define DO_SAMPLES 20       // Number of samples for averaging
+
+// Height ng Sensor to riverbed
 #define MAX_HEIGHT 250.0 // from sensor to riverbed
 
 String gateState = "Unknown";
@@ -24,6 +40,7 @@ Fuzzy *fuzzy = new Fuzzy();
 FuzzyInput *pH;
 FuzzyInput *DO;
 FuzzyOutput *WaterQuality;
+
 // Data structure for tide schedule
 typedef struct {
     uint32_t epoch;     // Time in seconds
@@ -86,6 +103,27 @@ const TideEntry tideSchedule[] PROGMEM = {
 
 };
 
+float readDO() {
+    float sum = 0;
+    for(int i = 0; i < DO_SAMPLES; i++) {
+        int raw = analogRead(DO_PIN);
+        float voltage = raw * (VREF / ADC_RESOLUTION);
+        sum += (voltage / VREF) * DO_SATURATION;
+        delay(10);
+    }
+    return sum / DO_SAMPLES;
+}
+
+float readPH() {
+    float sum = 0;
+    for(int i = 0; i < PH_SAMPLES; i++) {
+        int raw = analogRead(PH_PIN);
+        float voltage = raw * (VREF / ADC_RESOLUTION);
+        sum += 7.0 + (voltage - PH_7_VOLTAGE) / PH_SLOPE;
+        delay(10);
+    }
+    return sum / PH_SAMPLES;
+}
 
 // Function to extract date components from an epoch timestamp
 void getDateFromEpoch(uint32_t epoch, int &year, int &month, int &day) {
@@ -323,56 +361,48 @@ void setup() {
     alkaline_normal->joinWithAND(alkaline, normalDO);
     fuzzy->addFuzzyRule(new FuzzyRule(9, alkaline_normal, good_output)); 
 
-
     // Get current time
     DateTime now = rtc.now();
     uint32_t currentEpoch = now.unixtime();
 
     // Process today's tide events
     checkFutureLowTides(currentEpoch);
-    Serial.print("lowtideCount: ");
+    Serial.print("Low tide Count: ");
     Serial.println(lowTideAlertLevel);
 }
 
 void loop() {
-    Serial.println("Simulating all possible outputs...\n");
-
-    for (float pH_value = 0.0; pH_value <= 14.0; pH_value += 0.5) {  
-        for (float DO_value = 0.0; DO_value <= 20.0; DO_value += 0.5) { 
+    float doValue = readDO();
+    float pHValue = readPH();
             
-            // Set Inputs
-            fuzzy->setInput(1, pH_value);
-            fuzzy->setInput(2, DO_value);
+    // Set Inputs
+    fuzzy->setInput(1, pHValue);
+    fuzzy->setInput(2, doValue);
 
-            // Evaluate Fuzzy Logic
-            fuzzy->fuzzify();
+    // Evaluate Fuzzy Logic
+    fuzzy->fuzzify();
 
-            // Get Fuzzy Output
-            float waterQuality = fuzzy->defuzzify(1);
-            String qualityLabel = classifyWaterQuality(waterQuality);
+    // Get Fuzzy Output
+    float waterQuality = fuzzy->defuzzify(1);
+    String qualityLabel = classifyWaterQuality(waterQuality);
 
-            // Simulate Tide Data
-            float waterLevelMeters = getWaterLevel();
-            String tideStatus = getTideStatus(waterLevelMeters);
-            String gateDecision = getGateDecision(waterQuality, tideStatus);
+    // Simulate Tide Data
+    float waterLevelMeters = getWaterLevel();
+    String tideStatus = getTideStatus(waterLevelMeters);
+    String gateDecision = getGateDecision(waterSTAT, tideStatus);
 
-            // Debug Output
-            Serial.println("------------------------------------------------------");
-            Serial.print("pH: "); Serial.print(pH_value, 1);
-            Serial.print(" | DO: "); Serial.print(DO_value, 1);
-            Serial.print(" | Water Quality: "); Serial.print(waterQuality);
-            Serial.print(" | Classification: "); Serial.println(qualityLabel);
-            
-            Serial.print("Tide Height: "); Serial.print(waterLevelMeters, 2); Serial.print(" m");
-            Serial.print(" | Tide Status: "); Serial.println(tideStatus);
-            
-            Serial.print("Gate Decision: "); Serial.println(gateDecision);
-            Serial.println("------------------------------------------------------");
+    // Debug Output
+    Serial.println("------------------------------------------------------");
+    Serial.print("pH: "); Serial.print(pHValue, 2);
+    Serial.print(" | DO: "); Serial.print(doValue, 2);
+    Serial.print(" | Water Quality: "); Serial.print(waterQuality);
+    Serial.print(" | Classification: "); Serial.println(qualityLabel);
+    
+    Serial.print("Tide Height: "); Serial.print(waterLevelMeters, 2); Serial.print(" m");
+    Serial.print(" | Tide Status: "); Serial.println(tideStatus);
+    
+    Serial.print("Gate Decision: "); Serial.println(gateDecision);
+    Serial.println("------------------------------------------------------");
 
-            delay(200); 
-        }
-    }
-
-    Serial.println("Simulation complete!");
-    while (1); 
+    delay(200); 
 }

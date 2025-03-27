@@ -1,20 +1,17 @@
+// May actual sensor reading + fuzzy + dataset
+
 #include <Arduino.h>
-#include <Fuzzy.h>
 #include <RTClib.h>
 #include <SPI.h>
 #include <Wire.h>
-#include <SoftwareSerial.h>
-
-#define SIM900_POWER_PIN 9  // Pin connected to SIM900's PWRKEY
-SoftwareSerial mySerial(7, 8);  // SIM900 TX->D7, RX->D8
 
 //PINS DESIGNATIONS
 #define trigPin 5
 #define echoPin 6
 
 // Define analog input pins
-#define DO_PIN A2   // DO Sensor connected to A2
-#define PH_PIN A0   // pH Sensor connected to A0
+#define DO_PIN A0   // DO Sensor connected to A0
+#define PH_PIN A1   // pH Sensor connected to A1
 
 // Calibration values for pH sensor
 #define PH_7_VOLTAGE 1.2    // Voltage at pH 7 (Neutral)
@@ -27,21 +24,15 @@ SoftwareSerial mySerial(7, 8);  // SIM900 TX->D7, RX->D8
 #define DO_SATURATION 25    // Maximum DO value in mg/L at calibration
 #define DO_SAMPLES 20       // Number of samples for averaging
 
-// Height ng Sensor to riverbed
+// Height ng sensor to ilalim ng ilog.
 #define MAX_HEIGHT 250.0 // from sensor to riverbed
 
-//Mobile Number of the Owner
-String ownerNumber = "+639618936396";  // Owner's Number
-
-static bool sentMorning = false;
-static bool sentAfternoon = false;
 String gateState = "Unknown";
 long duration;
 float distanceCM, distanceMeters;
 float waterLevelCM, waterLevelMeters;
 int waterSTAT = 0;
 int lowTideAlertLevel = 0; 
-int lastGateDecision = -1;  // Store the last gate decision
 
 RTC_DS3231 rtc;
 Fuzzy *fuzzy = new Fuzzy();
@@ -50,7 +41,6 @@ Fuzzy *fuzzy = new Fuzzy();
 FuzzyInput *pH;
 FuzzyInput *DO;
 FuzzyOutput *WaterQuality;
-
 // Data structure for tide schedule
 typedef struct {
     uint32_t epoch;     // Time in seconds
@@ -113,6 +103,15 @@ const TideEntry tideSchedule[] PROGMEM = {
 
 };
 
+
+// Function to extract date components from an epoch timestamp
+void getDateFromEpoch(uint32_t epoch, int &year, int &month, int &day) {
+    DateTime dt = DateTime(epoch);
+    year = dt.year();
+    month = dt.month();
+    day = dt.day();
+}
+
 float readDO() {
     float sum = 0;
     for(int i = 0; i < DO_SAMPLES; i++) {
@@ -133,66 +132,6 @@ float readPH() {
         delay(10);
     }
     return sum / PH_SAMPLES;
-}
-
-// Turns SIM900 module ON
-void powerOnSIM900() {
-  Serial.println("Powering ON...");
-  digitalWrite(SIM900_POWER_PIN, HIGH);
-  delay(1000);  // Required 1-second pulse
-  digitalWrite(SIM900_POWER_PIN, LOW);
-
-  delay(8000);  // Wait for module to initialize
-  Serial.println("Module should be ON now.");
-}
-
-// Check if SIM900 is responsive
-bool checkSIM900Ready() {
-  mySerial.println("AT");
-  unsigned long startTime = millis();
-  
-  while (millis() - startTime < 2000) {  // Wait up to 2 seconds for a response
-    if (mySerial.available()) {
-      String response = mySerial.readString();
-      Serial.println("Response: " + response);
-      if (response.indexOf("OK") != -1) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-// Function to handle missed call and SMS alert
-void alertOwner(String number, String message) {
-  Serial.println("Calling " + ownerNumber + "...");
-  mySerial.println("ATD" + ownerNumber + ";");  // Dial the number
-  delay(10000);  // Keep call active for 10 seconds (missed call)
-  mySerial.println("ATH");  // Hang up the call
-  Serial.println("Missed call sent!");
-
-  delay(2000);  // Short delay before sending SMS
-
-  Serial.println("Sending SMS to " + ownerNumber + "...");
-  mySerial.print("AT+CMGS=\"");
-  mySerial.print(ownerNumber);
-  mySerial.println("\"");
-  delay(500);
-
-  mySerial.print(message);
-  delay(500);
-  mySerial.write(26); 
-  delay(5000);
-
-  Serial.println("SMS alert sent!");
-}
-
-// Function to extract date components from an epoch timestamp
-void getDateFromEpoch(uint32_t epoch, int &year, int &month, int &day) {
-    DateTime dt = DateTime(epoch);
-    year = dt.year();
-    month = dt.month();
-    day = dt.day();
 }
 
 // Function to check for all tide events within the current day
@@ -307,27 +246,24 @@ String classifyWaterQuality(float waterQuality) {
 
 // Water Quality + Tide Status = Gate Decision
 String getGateDecision(int waterSTAT, String tideStatus) {
-    int gateState;
-    if ((waterSTAT == 1) && (tideStatus == "Low")) gateState = 11;                 // Toxic + Low  = Open 
-    else if ((waterSTAT == 1) && (tideStatus == "High")) gateState = 12;           // Toxic + High = Open 
+    if ((waterSTAT == 1) && (tideStatus == "Low")) gateState = "Open";        // Toxic + Low  = Open 
+    else if ((waterSTAT == 1) && (tideStatus == "High")) gateState = "Open";  // Toxic + High = Open 
 
-    else if ((waterSTAT == 2) && (tideStatus == "Low")) gateState = 21;            // Poor + Low   = Conditional 
-    else if ((waterSTAT == 2) && (tideStatus == "High")) gateState = 22;           // Poor + High  = Open 
+    else if ((waterSTAT == 2) && (tideStatus == "Low")) gateState = "Conditional"; // Poor + Low   = Conditional 
+    else if ((waterSTAT == 2) && (tideStatus == "High")) gateState = "Open";       // Poor + High  = Open 
 
-    else if ((waterSTAT == 3) && (tideStatus == "Low")) gateState = 31;            // Good + Low   = Close 
-    else if ((waterSTAT == 3) && (tideStatus == "High")) gateState = 32;           // Good + High = Conditional 
+    else if ((waterSTAT == 3) && (tideStatus == "Low")) gateState = "Close";       // Good + Low   = Close 
+    else if ((waterSTAT == 3) && (tideStatus == "High")) gateState = "Conditional"; // Good + High = Conditional 
 
-    else if ((waterSTAT == 4) && (tideStatus == "Low")) gateState = 41;            // Excellent + Low  = Close 
-    else if ((waterSTAT == 4) && (tideStatus == "High")) gateState = 42;           // Excellent + High = Close 
-    else gateState = -1;
+    else if ((waterSTAT == 4) && (tideStatus == "Low")) gateState = "Close";       // Excellent + Low  = Close 
+    else if ((waterSTAT == 4) && (tideStatus == "High")) gateState = "Close";      // Excellent + High = Close 
+    else gateState = "Unknown";
+
     return gateState;
 }
 
 void setup() {
     Serial.begin(9600);
-    mySerial.begin(9600);
-    pinMode(SIM900_POWER_PIN, OUTPUT);
-    digitalWrite(SIM900_POWER_PIN, LOW);
     pinMode(trigPin, OUTPUT);
     pinMode(echoPin, INPUT);
     if (!rtc.begin()) {
@@ -426,48 +362,22 @@ void setup() {
     alkaline_normal->joinWithAND(alkaline, normalDO);
     fuzzy->addFuzzyRule(new FuzzyRule(9, alkaline_normal, good_output)); 
 
+
     // Get current time
     DateTime now = rtc.now();
     uint32_t currentEpoch = now.unixtime();
 
-    Serial.println("Initializing GSM module...");
-    Serial.println("Checking SIM900 power status...");
-
-      // Check if SIM900 responds to AT command
-      if (checkSIM900Ready()) {
-        Serial.println("SIM900 is ON and responsive.");
-      } else {
-        Serial.println("SIM900 did not respond. Powering ON...");
-        powerOnSIM900();
-
-        // Double-check after power-on
-        if (checkSIM900Ready()) {
-          Serial.println("SIM900 is now ON and responsive.");
-        } else {
-          Serial.println("SIM900 still not responding. Check connections.");
-        }
-      }
-    
-    mySerial.println("AT");
-    delay(500);
-
-    mySerial.println("AT+CMGF=1");
-    delay(500);
-    mySerial.println("AT+CSCS=\"GSM\"");
-    delay(500);
-
-    Serial.println("GSM module ready!");
-
     // Process today's tide events
     checkFutureLowTides(currentEpoch);
-    Serial.print("Low tide Count: ");
+    Serial.print("lowtideCount: ");
     Serial.println(lowTideAlertLevel);
 }
 
 void loop() {
+    // Get sensor readings
     float doValue = readDO();
     float pHValue = readPH();
-            
+  
     // Set Inputs
     fuzzy->setInput(1, pHValue);
     fuzzy->setInput(2, doValue);
@@ -482,15 +392,7 @@ void loop() {
     // Simulate Tide Data
     float waterLevelMeters = getWaterLevel();
     String tideStatus = getTideStatus(waterLevelMeters);
-    int gateDecision = getGateDecision(waterSTAT, tideStatus);
-    String gateText;
-    switch (gateDecision) {
-        case 11: case 12: gateText = "Open"; break;
-        case 21: case 32: gateText = "Conditional"; break;
-        case 22: gateText = "Open"; break;
-        case 31: case 41: case 42: gateText = "Close"; break;
-        default: gateText = "Unknown"; break;
-    }
+    String gateDecision = getGateDecision(waterSTAT, tideStatus);
 
     // Debug Output
     Serial.println("------------------------------------------------------");
@@ -502,120 +404,9 @@ void loop() {
     Serial.print("Tide Height: "); Serial.print(waterLevelMeters, 2); Serial.print(" m");
     Serial.print(" | Tide Status: "); Serial.println(tideStatus);
     
-    Serial.print("Gate Decision: "); Serial.println(gateText);
+    Serial.print("Gate Decision: "); Serial.println(gateDecision);
     Serial.println("------------------------------------------------------");
 
-    // Get current time
-    DateTime now = rtc.now();
-    int currentHour = now.hour();
-    int currentMinute = now.minute();
 
-    // Check for 8:00 AM alert
-    if (currentHour == 8 && currentMinute == 0 && !sentMorning) {    // ownerNumber = "+63XXXXXXXXXX"
-        Serial.println("Calling +639618936396...");
-        mySerial.println("ATD+639618936396;");  // Dial the number
-        delay(10000);  // Keep call active for 10 seconds (missed call)
-        mySerial.println("ATH");  // Hang up the call
-        Serial.println("Missed call sent!");
-
-        delay(2000);  // Short delay before sending SMS
-
-        Serial.println("Sending SMS to +639618936396...");
-        mySerial.print("AT+CMGS=\"+639618936396\"\r");
-        delay(500);
-
-        mySerial.print("STATUS NG TUBIG\nDO: " + String(DO_value) + 
-                        "\npH: " + String(pH_value) + 
-                        "\nWater Height: " + String(waterHeight) + "m");
-        delay(500);
-        mySerial.write(26); 
-        delay(5000);
-
-        Serial.println("SMS alert sent!");
-
-        sentMorning = true;
-    }
-    if (currentHour == 8 && currentMinute > 0) {
-        sentMorning = false;  // Reset flag after 8:00 AM has passed
-    }
-
-    // Check for 4:00 PM alert
-    if (currentHour == 16 && currentMinute == 0 && !sentAfternoon) {
-        Serial.println("Calling +639618936396...");
-        mySerial.println("ATD+639618936396;");  // Dial the number
-        delay(10000);  // Keep call active for 10 seconds (missed call)
-        mySerial.println("ATH");  // Hang up the call
-        Serial.println("Missed call sent!");
-
-        delay(2000);  // Short delay before sending SMS
-
-        Serial.println("Sending SMS to +639618936396...");
-        mySerial.print("AT+CMGS=\"+639618936396\"\r");
-        delay(500);
-
-        mySerial.print("STATUS NG TUBIG\nDO: " + String(DO_value) + 
-                        "\npH: " + String(pH_value) + 
-                        "\nWater Height: " + String(waterHeight) + "m");
-        delay(500);
-        mySerial.write(26); 
-        delay(5000);
-
-        Serial.println("SMS alert sent!");
-
-        sentAfternoon = true;
-    }
-    if (currentHour == 16 && currentMinute > 0) {
-        sentAfternoon = false;  // Reset flag after 4:00 PM has passed
-    }
-
-    // Send SMS Alert 
-    sendAlert(gateDecision, lowTideAlertLevel);
-
-    delay(60000); //Check All Parameters in 1 Min (60 Seconds)
-}
-
-void sendAlert(int gateDecision, int lowTideAlertLevel) {
-
-    // Skip sending alert if the gate decision is unknown
-    if (gateDecision == -1) {
-        Serial.println("No alert sent: Unknown gate state.");
-        return;
-    }
-
-    // Only send an alert if the gateDecision has changed
-    if (gateDecision != lastGateDecision) {
-        String message;
-
-        switch (gateDecision) {
-            case 11: message = "ALERT: Toxic Water habang Low Tide → OPEN Gate"; break;
-            case 12: message = "ALERT: Toxic Water habang High Tide → OPEN Gate"; break;
-            case 21:  
-                if (lowTideAlertLevel >= 3) {
-                    message = "ALERT: Poor Water habang Low Tide (3-day consecutive) → OPEN Gate";
-                } else {
-                    message = "ALERT: Poor Water habang Low Tide → CLOSE Gate"; 
-                }
-                break;
-            case 22: message = "ALERT: Poor Water habang High Tide → OPEN Gate"; break;
-            case 31: message = "ALERT: Good Water habang Low Tide → CLOSE Gate"; break;
-            case 32:
-                if (lowTideAlertLevel >= 5) {
-                    message = "ALERT: Good Water habang High Tide (5-day consecutive Low Tides) → OPEN Gate";
-                } else {
-                    message = "ALERT: Good Water habang High Tide → CLOSE Gate"; 
-                }
-                break;
-            case 41: message = "ALERT: Excellent Water habang Low Tide → CLOSE Gate"; break;
-            case 42: message = "ALERT: Excellent Water habang High Tide → CLOSE Gate"; break;
-            default: Serial.println("No alert sent: Unknown gate state."); return;
-        }
-
-        Serial.println(message);
-        
-        // Send missed call and SMS alert
-        alertOwner(ownerNumber, message);
-        
-        // Update lastGateDecision to prevent duplicate alerts
-        lastGateDecision = gateDecision;
-    }
+    delay(200); 
 }
