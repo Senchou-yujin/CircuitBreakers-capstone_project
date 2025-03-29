@@ -1,4 +1,3 @@
-#include <Arduino.h>
 #include <Fuzzy.h>
 #include <RTClib.h>
 #include <SPI.h>
@@ -11,6 +10,7 @@ SoftwareSerial mySerial(7, 8);  // SIM900 TX->D7, RX->D8
 //PINS DESIGNATIONS
 #define trigPin 5
 #define echoPin 6
+#define LED_PIN 10  // Define LED Indicator
 
 // Define analog input pins
 #define DO_PIN A2   // DO Sensor connected to A2
@@ -31,7 +31,7 @@ SoftwareSerial mySerial(7, 8);  // SIM900 TX->D7, RX->D8
 #define MAX_HEIGHT 250.0 // from sensor to riverbed
 
 //Mobile Number of the Owner
-String ownerNumber = "+639618936396";  // Owner's Number
+String ownerNumber = "+639618936396";  // Owner's Number09958919412
 
 static bool sentMorning = false;
 static bool sentAfternoon = false;
@@ -110,7 +110,6 @@ const TideEntry tideSchedule[] PROGMEM = {
     {1757812260, 1}, {1757901660, 1}, {1757992860, 1}, {1758085560, 1},
     {1758177180, 1}, {1758267900, 1}, {1758357900, 1}, {1758447540, 1},
     {1758536880, 1}, {1758626040, 1}, {1758754620, 1}, {1758841680, 1}
-
 };
 
 float readDO() {
@@ -137,13 +136,11 @@ float readPH() {
 
 // Turns SIM900 module ON
 void powerOnSIM900() {
-  Serial.println("Powering ON...");
   digitalWrite(SIM900_POWER_PIN, HIGH);
   delay(1000);  // Required 1-second pulse
   digitalWrite(SIM900_POWER_PIN, LOW);
 
   delay(8000);  // Wait for module to initialize
-  Serial.println("Module should be ON now.");
 }
 
 // Check if SIM900 is responsive
@@ -213,7 +210,6 @@ void checkFutureLowTides(uint32_t currentEpoch) {
     }
 
     if (!foundStart) {
-        Serial.println("No future tide data available.");
         return;
     }
 
@@ -243,18 +239,13 @@ void checkFutureLowTides(uint32_t currentEpoch) {
 
         // Trigger alerts
         if (lowTideCount == 3) {
-            Serial.println("Alert: 3 consecutive low tides detected!");
             lowTideAlertLevel = 3;
         } else if (lowTideCount == 5) {
-            Serial.println("Alert: 5 or more consecutive low tides detected!");
             lowTideAlertLevel = 5;
             break; 
         }
-
         scanCounter++; 
     }
-
-
     // Serial.print("Final Consecutive Low Tides Count: ");
     // Serial.println(lowTideCount);
 }
@@ -306,7 +297,7 @@ String classifyWaterQuality(float waterQuality) {
 }
 
 // Water Quality + Tide Status = Gate Decision
-String getGateDecision(int waterSTAT, String tideStatus) {
+int getGateDecision(int waterSTAT, String tideStatus) {
     int gateState;
     if ((waterSTAT == 1) && (tideStatus == "Low")) gateState = 11;                 // Toxic + Low  = Open 
     else if ((waterSTAT == 1) && (tideStatus == "High")) gateState = 12;           // Toxic + High = Open 
@@ -323,16 +314,48 @@ String getGateDecision(int waterSTAT, String tideStatus) {
     return gateState;
 }
 
+// Function to blink LED
+void blinkLED(int times, int interval) {
+    for (int i = 0; i < times; i++) {
+        digitalWrite(LED_PIN, HIGH);
+        delay(interval);
+        digitalWrite(LED_PIN, LOW);
+        delay(interval);
+    }
+}
+
+// Function to fade LED in and out
+void fadeLED(int times) {
+    for (int j = 0; j < times; j++) {
+        for (int brightness = 0; brightness <= 255; brightness++) {
+            analogWrite(LED_PIN, brightness);  // Fade in
+            delay(5);
+        }
+        for (int brightness = 255; brightness >= 0; brightness--) {
+            analogWrite(LED_PIN, brightness);  // Fade out
+            delay(5);
+        }
+    }
+}
+
 void setup() {
     Serial.begin(9600);
     mySerial.begin(9600);
     pinMode(SIM900_POWER_PIN, OUTPUT);
-    digitalWrite(SIM900_POWER_PIN, LOW);
     pinMode(trigPin, OUTPUT);
     pinMode(echoPin, INPUT);
+    pinMode(LED_PIN, OUTPUT);
+     // Initialize RTC
+    Wire.begin();  // Uses hardware I2C (SDA = 20, SCL = 21)
     if (!rtc.begin()) {
         Serial.println("Couldn't find RTC");
+        blinkLED(3,500);
         while (1);
+    }
+
+    if (rtc.lostPower()) {
+        Serial.println("RTC lost power, setting time...");
+        rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); // Set time to compile time
     }
 
     // Initialize FuzzyInput for pH level
@@ -431,26 +454,29 @@ void setup() {
     uint32_t currentEpoch = now.unixtime();
 
     Serial.println("Initializing GSM module...");
-    Serial.println("Checking SIM900 power status...");
 
-      // Check if SIM900 responds to AT command
-      if (checkSIM900Ready()) {
-        Serial.println("SIM900 is ON and responsive.");
-      } else {
-        Serial.println("SIM900 did not respond. Powering ON...");
-        powerOnSIM900();
+      // // Check if SIM900 responds to AT command
+      // if (checkSIM900Ready()) {
+      //   Serial.println("SIM900 is ON.");
+      // } else {
+      //   Serial.println("SIM900 Powering ON...");
+      //   powerOnSIM900();
 
-        // Double-check after power-on
-        if (checkSIM900Ready()) {
-          Serial.println("SIM900 is now ON and responsive.");
-        } else {
-          Serial.println("SIM900 still not responding. Check connections.");
-        }
-      }
+      //   // Double-check after power-on
+      //   if (checkSIM900Ready()) {
+      //     Serial.println("SIM900 is now responsive.");
+      //   } else {
+      //     Serial.println("Check connections.");
+      //   }
+      // }
     
-    mySerial.println("AT");
-    delay(500);
-
+    // mySerial.println("AT");
+    // delay(500);
+    // if (!mySerial.find("OK")) {  // If "OK" is NOT received
+    //     Serial.println("Error: GSM not responding!");
+    //     blinkLED(4, 500);  // Blink LED 4 times (500ms interval)
+    //     return;
+    // }
     mySerial.println("AT+CMGF=1");
     delay(500);
     mySerial.println("AT+CSCS=\"GSM\"");
@@ -512,21 +538,22 @@ void loop() {
 
     // Check for 8:00 AM alert
     if (currentHour == 8 && currentMinute == 0 && !sentMorning) {    // ownerNumber = "+63XXXXXXXXXX"
+        Serial.println("ALERT: It's Time!");
         Serial.println("Calling +639618936396...");
-        mySerial.println("ATD+639618936396;");  // Dial the number
-        delay(10000);  // Keep call active for 10 seconds (missed call)
+        mySerial.println("ATD+639618936396;");  // Dial number
+        delay(10000);  // Keep call active for 10 secs
         mySerial.println("ATH");  // Hang up the call
         Serial.println("Missed call sent!");
 
-        delay(2000);  // Short delay before sending SMS
+        delay(2000);  
 
         Serial.println("Sending SMS to +639618936396...");
         mySerial.print("AT+CMGS=\"+639618936396\"\r");
         delay(500);
 
-        mySerial.print("STATUS NG TUBIG\nDO: " + String(DO_value) + 
-                        "\npH: " + String(pH_value) + 
-                        "\nWater Height: " + String(waterHeight) + "m");
+        mySerial.print("STATUS NG TUBIG\nDO: " + String(doValue) + 
+                        "\npH: " + String(pHValue) + 
+                        "\nWater Height: " + String(waterLevelMeters) + "m");
         delay(500);
         mySerial.write(26); 
         delay(5000);
@@ -541,31 +568,31 @@ void loop() {
 
     // Check for 4:00 PM alert
     if (currentHour == 16 && currentMinute == 0 && !sentAfternoon) {
+        Serial.println("ALERT: It's Time!");
         Serial.println("Calling +639618936396...");
         mySerial.println("ATD+639618936396;");  // Dial the number
-        delay(10000);  // Keep call active for 10 seconds (missed call)
+        delay(10000);  // Keep call active for 10 secs
         mySerial.println("ATH");  // Hang up the call
         Serial.println("Missed call sent!");
 
-        delay(2000);  // Short delay before sending SMS
+        delay(2000); 
 
         Serial.println("Sending SMS to +639618936396...");
         mySerial.print("AT+CMGS=\"+639618936396\"\r");
         delay(500);
 
-        mySerial.print("STATUS NG TUBIG\nDO: " + String(DO_value) + 
-                        "\npH: " + String(pH_value) + 
-                        "\nWater Height: " + String(waterHeight) + "m");
+        mySerial.print("STATUS NG TUBIG\nDO: " + String(doValue) + 
+                        "\npH: " + String(pHValue) + 
+                        "\nWater Height: " + String(waterLevelMeters) + "m");
         delay(500);
         mySerial.write(26); 
         delay(5000);
 
         Serial.println("SMS alert sent!");
-
         sentAfternoon = true;
     }
     if (currentHour == 16 && currentMinute > 0) {
-        sentAfternoon = false;  // Reset flag after 4:00 PM has passed
+        sentAfternoon = false; 
     }
 
     // Send SMS Alert 
@@ -578,7 +605,8 @@ void sendAlert(int gateDecision, int lowTideAlertLevel) {
 
     // Skip sending alert if the gate decision is unknown
     if (gateDecision == -1) {
-        Serial.println("No alert sent: Unknown gate state.");
+        Serial.println("No alert sent");
+        
         return;
     }
 
@@ -602,7 +630,7 @@ void sendAlert(int gateDecision, int lowTideAlertLevel) {
                 if (lowTideAlertLevel >= 5) {
                     message = "ALERT: Good Water habang High Tide (5-day consecutive Low Tides) → OPEN Gate";
                 } else {
-                    message = "ALERT: Good Water habang High Tide → CLOSE Gate"; 
+                    message = "ALERT: Good Water habang High Tide → CLOSE Gate";
                 }
                 break;
             case 41: message = "ALERT: Excellent Water habang Low Tide → CLOSE Gate"; break;
@@ -611,10 +639,8 @@ void sendAlert(int gateDecision, int lowTideAlertLevel) {
         }
 
         Serial.println(message);
-        
         // Send missed call and SMS alert
         alertOwner(ownerNumber, message);
-        
         // Update lastGateDecision to prevent duplicate alerts
         lastGateDecision = gateDecision;
     }
