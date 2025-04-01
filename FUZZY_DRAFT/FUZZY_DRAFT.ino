@@ -16,23 +16,31 @@ SoftwareSerial mySerial(7, 8);  // SIM900 TX->D7, RX->D8
 #define DO_PIN A2   // DO Sensor connected to A2
 #define PH_PIN A0   // pH Sensor connected to A0
 
-// Calibration values for pH sensor
-#define PH_7_VOLTAGE 1.2    // Voltage at pH 7 (Neutral)
-#define PH_SLOPE -0.18      // Voltage change per pH unit
-#define PH_SAMPLES 20       // Number of samples for averaging
+// Constants
+#define VREF 5000      // Reference voltage in mV
+#define ADC_RES 1024   // ADC Resolution
 
-// Calibration values for DO sensor
-#define VREF 5.0            // Reference voltage
-#define ADC_RESOLUTION 1023.0 // 10-bit ADC resolution
-#define DO_SATURATION 25    // Maximum DO value in mg/L at calibration
-#define DO_SAMPLES 20       // Number of samples for averaging
+// Single-point calibration for DO sensor
+#define CAL1_V (1600)  // Calibration voltage in mV
+#define CAL1_T (25)    // Calibration temperature in °C
+
+// pH Sensor Settings
+#define OFFSET 0.00    // Adjust based on calibration
+#define SAMPLING_INTERVAL 20
+#define PRINT_INTERVAL 1000
+#define ARRAY_LENGTH 40
 
 // Height ng Sensor to riverbed
 #define MAX_HEIGHT 250.0 // from sensor to riverbed
 
 //Mobile Number of the Owner
-String ownerNumber = "+639618936396";  // Owner's Number09958919412
+String ownerNumber = "+639618936396";  // Owner's Number 09958919412
+String researcherNumber = "+639295710236"; 
 
+float doValue;
+float pHValue;
+int pHArray[ARRAY_LENGTH];   
+int pHArrayIndex = 0;
 static bool sentMorning = false;
 static bool sentAfternoon = false;
 String gateState = "Unknown";
@@ -56,6 +64,13 @@ typedef struct {
     uint32_t epoch;     // Time in seconds
     bool tideType;      // 1=High, 0=Low
 } TideEntry;
+
+// DO Lookup Table
+const uint16_t DO_Table[41] = {
+    14460, 14220, 13820, 13440, 13090, 12740, 12420, 12110, 11810, 11530,
+    11260, 11010, 10770, 10530, 10300, 10080, 9860, 9660, 9460, 9270,
+    9080, 8900, 8730, 8570, 8410, 8250, 8110, 7960, 7820, 7690,
+    7560, 7430, 7300, 7180, 7070, 6950, 6840, 6730, 6630, 6530, 6410};
 
 const TideEntry tideSchedule[] PROGMEM = {
     {1740869340, 1}, {1740959100, 0}, {1741004400, 0}, {1741092120, 0},
@@ -112,26 +127,55 @@ const TideEntry tideSchedule[] PROGMEM = {
     {1758536880, 1}, {1758626040, 1}, {1758754620, 1}, {1758841680, 1}
 };
 
-float readDO() {
-    float sum = 0;
-    for(int i = 0; i < DO_SAMPLES; i++) {
-        int raw = analogRead(DO_PIN);
-        float voltage = raw * (VREF / ADC_RESOLUTION);
-        sum += (voltage / VREF) * DO_SATURATION;
-        delay(10);
-    }
-    return sum / DO_SAMPLES;
+// Function to calculate pH
+float readPH() {
+    int raw = analogRead(PH_PIN);  // Directly read ADC
+    float voltage = (float)raw * VREF / ADC_RES / 1000.0;  // Convert to voltage
+    return (3.5 * voltage) + OFFSET;  // Apply linear conversion
 }
 
-float readPH() {
-    float sum = 0;
-    for(int i = 0; i < PH_SAMPLES; i++) {
-        int raw = analogRead(PH_PIN);
-        float voltage = raw * (VREF / ADC_RESOLUTION);
-        sum += 7.0 + (voltage - PH_7_VOLTAGE) / PH_SLOPE;
-        delay(10);
+
+// Function to calculate DO in mg/L
+float readDO() {
+    int raw = analogRead(DO_PIN);
+    float voltage = (float)raw * VREF / ADC_RES;  // Convert ADC to mV
+    uint16_t V_saturation = CAL1_V + (35 * 25) - (CAL1_T * 35);  // 25°C fixed temp
+    return (voltage * DO_Table[25] / V_saturation) / 1000.0;  // Convert to mg/L
+}
+
+// Function to average pH readings
+double avergearray(int* arr, int number) {
+    int i;
+    int max, min;
+    long amount = 0;
+
+    if (number < 5) {  // Direct calculation for small samples
+        for (i = 0; i < number; i++) amount += arr[i];
+        return (double)amount / number;
     }
-    return sum / PH_SAMPLES;
+
+    // Exclude max and min values for better averaging
+    if (arr[0] < arr[1]) {
+        min = arr[0];
+        max = arr[1];
+    } else {
+        min = arr[1];
+        max = arr[0];
+    }
+
+    for (i = 2; i < number; i++) {
+        if (arr[i] < min) {
+            amount += min;
+            min = arr[i];
+        } else if (arr[i] > max) {
+            amount += max;
+            max = arr[i];
+        } else {
+            amount += arr[i];
+        }
+    }
+
+    return (double)amount / (number - 2);
 }
 
 // Turns SIM900 module ON
@@ -173,6 +217,29 @@ void alertOwner(String number, String message) {
   Serial.println("Sending SMS to " + ownerNumber + "...");
   mySerial.print("AT+CMGS=\"");
   mySerial.print(ownerNumber);
+  mySerial.println("\"");
+  delay(500);
+
+  mySerial.print(message);
+  delay(500);
+  mySerial.write(26); 
+  delay(5000);
+
+  Serial.println("SMS alert sent!");
+}
+
+void alertResearcher(String number, String message) {
+  Serial.println("Calling " + researcherNumber + "...");
+  mySerial.println("ATD" + researcherNumber + ";");  // Dial the number
+  delay(10000);  // Keep call active for 10 seconds (missed call)
+  mySerial.println("ATH");  // Hang up the call
+  Serial.println("Missed call sent!");
+
+  delay(2000);  // Short delay before sending SMS
+
+  Serial.println("Sending SMS to " + researcherNumber + "...");
+  mySerial.print("AT+CMGS=\"");
+  mySerial.print(researcherNumber);
   mySerial.println("\"");
   delay(500);
 
@@ -272,7 +339,7 @@ float getWaterLevel() {
 // Function to determine tide status
 String getTideStatus(float waterLevelMeters) {
     if (waterLevelMeters >= 0 && waterLevelMeters <= 0.8) return "Low";
-    else if (waterLevelMeters >= 0.9 && waterLevelMeters <= 2) return "High";
+    else if (waterLevelMeters >= 0.81 && waterLevelMeters <= 2) return "High";
     else return "Unknown";
 }
 
@@ -491,8 +558,8 @@ void setup() {
 }
 
 void loop() {
-    float doValue = readDO();
-    float pHValue = readPH();
+    pHValue = readPH();
+    doValue = readDO();
             
     // Set Inputs
     fuzzy->setInput(1, pHValue);
@@ -506,7 +573,7 @@ void loop() {
     String qualityLabel = classifyWaterQuality(waterQuality);
 
     // Simulate Tide Data
-    float waterLevelMeters = getWaterLevel();
+    waterLevelMeters = getWaterLevel();
     String tideStatus = getTideStatus(waterLevelMeters);
     int gateDecision = getGateDecision(waterSTAT, tideStatus);
     String gateText;
@@ -536,8 +603,9 @@ void loop() {
     int currentHour = now.hour();
     int currentMinute = now.minute();
 
-    // Check for 8:00 AM alert
-    if (currentHour == 8 && currentMinute == 0 && !sentMorning) {    // ownerNumber = "+63XXXXXXXXXX"
+    // Send Daily status to OWNER
+    // Check for 7:00 AM alert
+    if (currentHour == 7 && currentMinute == 0 && !sentMorning) {    // ownerNumber = "+63XXXXXXXXXX"
         Serial.println("ALERT: It's Time!");
         Serial.println("Calling +639618936396...");
         mySerial.println("ATD+639618936396;");  // Dial number
@@ -566,8 +634,38 @@ void loop() {
         sentMorning = false;  // Reset flag after 8:00 AM has passed
     }
 
-    // Check for 4:00 PM alert
-    if (currentHour == 16 && currentMinute == 0 && !sentAfternoon) {
+        // Check for 12:00 AM alert
+    if (currentHour == 12 && currentMinute == 0 && !sentMorning) {    // ownerNumber = "+63XXXXXXXXXX"
+        Serial.println("ALERT: It's Time!");
+        Serial.println("Calling +639618936396...");
+        mySerial.println("ATD+639618936396;");  // Dial number
+        delay(10000);  // Keep call active for 10 secs
+        mySerial.println("ATH");  // Hang up the call
+        Serial.println("Missed call sent!");
+
+        delay(2000);  
+
+        Serial.println("Sending SMS to +639618936396...");
+        mySerial.print("AT+CMGS=\"+639618936396\"\r");
+        delay(500);
+
+        mySerial.print("STATUS NG TUBIG\nDO: " + String(doValue) + 
+                        "\npH: " + String(pHValue) + 
+                        "\nWater Height: " + String(waterLevelMeters) + "m");
+        delay(500);
+        mySerial.write(26); 
+        delay(5000);
+
+        Serial.println("SMS alert sent!");
+
+        sentMorning = true;
+    }
+    if (currentHour == 8 && currentMinute > 0) {
+        sentMorning = false;  // Reset flag after 8:00 AM has passed
+    }
+
+    // Check for 5:00 PM alert
+    if (currentHour == 17 && currentMinute == 0 && !sentAfternoon) {
         Serial.println("ALERT: It's Time!");
         Serial.println("Calling +639618936396...");
         mySerial.println("ATD+639618936396;");  // Dial the number
@@ -579,6 +677,96 @@ void loop() {
 
         Serial.println("Sending SMS to +639618936396...");
         mySerial.print("AT+CMGS=\"+639618936396\"\r");
+        delay(500);
+
+        mySerial.print("STATUS NG TUBIG\nDO: " + String(doValue) + 
+                        "\npH: " + String(pHValue) + 
+                        "\nWater Height: " + String(waterLevelMeters) + "m");
+        delay(500);
+        mySerial.write(26); 
+        delay(5000);
+
+        Serial.println("SMS alert sent!");
+        sentAfternoon = true;
+    }
+    if (currentHour == 16 && currentMinute > 0) {
+        sentAfternoon = false; 
+    }
+
+    // Send Daily Status to Researchers
+    // Check for 7:00 AM alert
+    if (currentHour == 7 && currentMinute == 0 && !sentMorning) {    // ownerNumber = "+63XXXXXXXXXX"
+        Serial.println("ALERT: It's Time!");
+        Serial.println("Calling +639958919412...");
+        mySerial.println("ATD+639958919412;");  // Dial number
+        delay(10000);  // Keep call active for 10 secs
+        mySerial.println("ATH");  // Hang up the call
+        Serial.println("Missed call sent!");
+
+        delay(2000);  
+
+        Serial.println("Sending SMS to +639958919412...");
+        mySerial.print("AT+CMGS=\"+639958919412\"\r");
+        delay(500);
+
+        mySerial.print("STATUS NG TUBIG\nDO: " + String(doValue) + 
+                        "\npH: " + String(pHValue) + 
+                        "\nWater Height: " + String(waterLevelMeters) + "m");
+        delay(500);
+        mySerial.write(26); 
+        delay(5000);
+
+        Serial.println("SMS alert sent!");
+
+        sentMorning = true;
+    }
+    if (currentHour == 8 && currentMinute > 0) {
+        sentMorning = false;  // Reset flag after 8:00 AM has passed
+    }
+
+        // Check for 12:00 AM alert
+    if (currentHour == 12 && currentMinute == 0 && !sentMorning) {    // ownerNumber = "+63XXXXXXXXXX"
+        Serial.println("ALERT: It's Time!");
+        Serial.println("Calling +639958919412...");
+        mySerial.println("ATD+639958919412;");  // Dial number
+        delay(10000);  // Keep call active for 10 secs
+        mySerial.println("ATH");  // Hang up the call
+        Serial.println("Missed call sent!");
+
+        delay(2000);  
+
+        Serial.println("Sending SMS to +639958919412...");
+        mySerial.print("AT+CMGS=\"+639958919412\"\r");
+        delay(500);
+
+        mySerial.print("STATUS NG TUBIG\nDO: " + String(doValue) + 
+                        "\npH: " + String(pHValue) + 
+                        "\nWater Height: " + String(waterLevelMeters) + "m");
+        delay(500);
+        mySerial.write(26); 
+        delay(5000);
+
+        Serial.println("SMS alert sent!");
+
+        sentMorning = true;
+    }
+    if (currentHour == 8 && currentMinute > 0) {
+        sentMorning = false;  // Reset flag after 8:00 AM has passed
+    }
+
+    // Check for 5:00 PM alert
+    if (currentHour == 17 && currentMinute == 0 && !sentAfternoon) {
+        Serial.println("ALERT: It's Time!");
+        Serial.println("Calling +639958919412...");
+        mySerial.println("ATD+639958919412;");  // Dial the number
+        delay(10000);  // Keep call active for 10 secs
+        mySerial.println("ATH");  // Hang up the call
+        Serial.println("Missed call sent!");
+
+        delay(2000); 
+
+        Serial.println("Sending SMS to +639958919412...");
+        mySerial.print("AT+CMGS=\"+639958919412\"\r");
         delay(500);
 
         mySerial.print("STATUS NG TUBIG\nDO: " + String(doValue) + 
@@ -640,7 +828,44 @@ void sendAlert(int gateDecision, int lowTideAlertLevel) {
 
         Serial.println(message);
         // Send missed call and SMS alert
+        Serial.println("Sending to Owner: ");
         alertOwner(ownerNumber, message);
+        //send status to owner
+        Serial.println("Sending Status: ");
+        Serial.println("Sending SMS to +639618936396...");
+        mySerial.print("AT+CMGS=\"+639618936396\"\r");
+        delay(500);
+
+        mySerial.print("STATUS NG TUBIG\nDO: " + String(doValue) + 
+                        "\npH: " + String(pHValue) + 
+                        "\nWater Height: " + String(waterLevelMeters) + "m");
+        delay(500);
+        mySerial.write(26); 
+        delay(5000);
+
+        Serial.println("SMS alert sent!");
+
+        delay(5000);
+
+
+        Serial.println("Sending to Researchers: ");
+        alertResearcher(researcherNumber, message);
+        //Send status to researcher
+        Serial.println("Sending SMS to +639295710236..."); //639958919412
+        mySerial.print("AT+CMGS=\"+639295710236\"\r");
+        delay(500);
+
+        mySerial.print("STATUS NG TUBIG\nDO: " + String(doValue) + 
+                        "\npH: " + String(pHValue) + 
+                        "\nWater Height: " + String(waterLevelMeters) + "m");
+        delay(500);
+        mySerial.write(26); 
+        delay(5000);
+
+        Serial.println("SMS alert sent!");
+
+        delay(5000);
+
         // Update lastGateDecision to prevent duplicate alerts
         lastGateDecision = gateDecision;
     }
