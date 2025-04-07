@@ -143,40 +143,6 @@ float readDO() {
     return (voltage * DO_Table[25] / V_saturation) / 1000.0;  // Convert to mg/L
 }
 
-// Function to average pH readings
-double avergearray(int* arr, int number) {
-    int i;
-    int max, min;
-    long amount = 0;
-
-    if (number < 5) {  // Direct calculation for small samples
-        for (i = 0; i < number; i++) amount += arr[i];
-        return (double)amount / number;
-    }
-
-    // Exclude max and min values for better averaging
-    if (arr[0] < arr[1]) {
-        min = arr[0];
-        max = arr[1];
-    } else {
-        min = arr[1];
-        max = arr[0];
-    }
-
-    for (i = 2; i < number; i++) {
-        if (arr[i] < min) {
-            amount += min;
-            min = arr[i];
-        } else if (arr[i] > max) {
-            amount += max;
-            max = arr[i];
-        } else {
-            amount += arr[i];
-        }
-    }
-
-    return (double)amount / (number - 2);
-}
 
 // Turns SIM900 module ON
 void powerOnSIM900() {
