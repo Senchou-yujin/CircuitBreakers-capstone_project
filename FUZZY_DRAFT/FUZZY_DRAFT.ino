@@ -596,8 +596,8 @@ void loop() {
 
         sentMorning = true;
     }
-    if (currentHour == 8 && currentMinute > 0) {
-        sentMorning = false;  // Reset flag after 8:00 AM has passed
+    if (currentHour == 7 && currentMinute > 3) {
+        sentMorning = false;  // Reset flag after 7:03 AM has passed
     }
 
         // Check for 12:00 AM alert
@@ -626,8 +626,8 @@ void loop() {
 
         sentMorning = true;
     }
-    if (currentHour == 8 && currentMinute > 0) {
-        sentMorning = false;  // Reset flag after 8:00 AM has passed
+    if (currentHour == 12 && currentMinute > 3) {
+        sentMorning = false;  // Reset flag after 12:03 AM has passed
     }
 
     // Check for 5:00 PM alert
@@ -655,24 +655,24 @@ void loop() {
         Serial.println("SMS alert sent!");
         sentAfternoon = true;
     }
-    if (currentHour == 16 && currentMinute > 0) {
+    if (currentHour == 17 && currentMinute > 3) {
         sentAfternoon = false; 
     }
 
     // Send Daily Status to Researchers
     // Check for 7:00 AM alert
-    if (currentHour == 7 && currentMinute == 0 && !sentMorning) {    // ownerNumber = "+63XXXXXXXXXX"
+    if (currentHour == 7 && currentMinute == 5 && !sentMorning) {    // ownerNumber = "+63XXXXXXXXXX"
         Serial.println("ALERT: It's Time!");
-        Serial.println("Calling +639958919412...");
-        mySerial.println("ATD+639958919412;");  // Dial number
+        Serial.println("Calling +639295710236...");
+        mySerial.println("ATD+639295710236;");  // Dial number
         delay(10000);  // Keep call active for 10 secs
         mySerial.println("ATH");  // Hang up the call
         Serial.println("Missed call sent!");
 
         delay(2000);  
 
-        Serial.println("Sending SMS to +639958919412...");
-        mySerial.print("AT+CMGS=\"+639958919412\"\r");
+        Serial.println("Sending SMS to +639295710236...");
+        mySerial.print("AT+CMGS=\"+639295710236\"\r");
         delay(500);
 
         mySerial.print("STATUS NG TUBIG\nDO: " + String(doValue) + 
@@ -686,23 +686,23 @@ void loop() {
 
         sentMorning = true;
     }
-    if (currentHour == 8 && currentMinute > 0) {
-        sentMorning = false;  // Reset flag after 8:00 AM has passed
+    if (currentHour == 7 && currentMinute > 10) {
+        sentMorning = false;  
     }
 
         // Check for 12:00 AM alert
-    if (currentHour == 12 && currentMinute == 0 && !sentMorning) {    // ownerNumber = "+63XXXXXXXXXX"
+    if (currentHour == 12 && currentMinute == 5 && !sentMorning) {    // ownerNumber = "+63XXXXXXXXXX"
         Serial.println("ALERT: It's Time!");
-        Serial.println("Calling +639958919412...");
-        mySerial.println("ATD+639958919412;");  // Dial number
+        Serial.println("Calling +639295710236...");
+        mySerial.println("ATD+639295710236;");  // Dial number
         delay(10000);  // Keep call active for 10 secs
         mySerial.println("ATH");  // Hang up the call
         Serial.println("Missed call sent!");
 
         delay(2000);  
 
-        Serial.println("Sending SMS to +639958919412...");
-        mySerial.print("AT+CMGS=\"+639958919412\"\r");
+        Serial.println("Sending SMS to +639295710236...");
+        mySerial.print("AT+CMGS=\"+639295710236\"\r");
         delay(500);
 
         mySerial.print("STATUS NG TUBIG\nDO: " + String(doValue) + 
@@ -716,23 +716,23 @@ void loop() {
 
         sentMorning = true;
     }
-    if (currentHour == 8 && currentMinute > 0) {
+    if (currentHour == 12 && currentMinute > 10) {
         sentMorning = false;  // Reset flag after 8:00 AM has passed
     }
 
     // Check for 5:00 PM alert
-    if (currentHour == 17 && currentMinute == 0 && !sentAfternoon) {
+    if (currentHour == 17 && currentMinute == 5 && !sentAfternoon) {
         Serial.println("ALERT: It's Time!");
-        Serial.println("Calling +639958919412...");
-        mySerial.println("ATD+639958919412;");  // Dial the number
+        Serial.println("Calling +639295710236...");
+        mySerial.println("ATD+639295710236;");  // Dial the number
         delay(10000);  // Keep call active for 10 secs
         mySerial.println("ATH");  // Hang up the call
         Serial.println("Missed call sent!");
 
         delay(2000); 
 
-        Serial.println("Sending SMS to +639958919412...");
-        mySerial.print("AT+CMGS=\"+639958919412\"\r");
+        Serial.println("Sending SMS to +639295710236...");
+        mySerial.print("AT+CMGS=\"+639295710236\"\r");
         delay(500);
 
         mySerial.print("STATUS NG TUBIG\nDO: " + String(doValue) + 
@@ -745,7 +745,7 @@ void loop() {
         Serial.println("SMS alert sent!");
         sentAfternoon = true;
     }
-    if (currentHour == 16 && currentMinute > 0) {
+    if (currentHour == 17 && currentMinute > 10) {
         sentAfternoon = false; 
     }
 
